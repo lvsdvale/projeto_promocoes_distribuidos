@@ -16,6 +16,18 @@ _, promo_pub_key = load_or_generate_keys("promocao")
 
 validated_promotions = []
 
+def load_promotions():
+    global validated_promotions
+    try:
+        with open("validated_promotions.json", "r") as f:
+            validated_promotions = json.load(f)
+    except FileNotFoundError:
+        validated_promotions = []
+
+def save_promotions():
+    with open("validated_promotions.json", "w") as f:
+        json.dump(validated_promotions, f)
+
 def get_new_connection():
     """Cria uma nova conexão limpa para evitar conflitos entre threads"""
     params = pika.ConnectionParameters(host='localhost', heartbeat=600)
@@ -25,7 +37,6 @@ def get_new_connection():
     return connection, channel
 
 def publish_event(routing_key, data):
-    """Abre uma conexão temporária, publica e fecha imediatamente"""
     try:
         conn, ch = get_new_connection()
         signature = sign_event(private_key, data)
@@ -36,7 +47,6 @@ def publish_event(routing_key, data):
         print(f"\n[Erro de Publicação] {e}")
 
 def consume_validation_events():
-    """Thread dedicada apenas para atualizar a lista de promoções"""
     try:
         conn, ch = get_new_connection()
         result = ch.queue_declare(queue='', durable=False, exclusive=True)
@@ -49,6 +59,7 @@ def consume_validation_events():
                 data = message['dados']
                 if not any(p['id'] == data['id'] for p in validated_promotions):
                     validated_promotions.append(data)
+                    save_promotions()
 
         ch.basic_consume(queue=q_name, on_message_callback=callback, auto_ack=True)
         ch.start_consuming()
@@ -110,6 +121,7 @@ def display_client_panel():
         print("1. Listar Promoções Ativas")
         print("2. Votar em uma Promoção")
         print("3. Assinar uma Categoria")
+        print("4. Super Voto (Hot Deal direto)")
         print("0. Voltar")
         choice = input("\nSeleção: ")
         if choice == '1':
@@ -119,16 +131,38 @@ def display_client_panel():
             for p in validated_promotions:
                 print(f"ID: {p['id']} | {p['nome']} [{p['categoria']}]")
             input("\nPressione ENTER para continuar...")
-        elif choice == '2':
+        elif choice == '2' or choice == '4':
+            if not validated_promotions:
+                print("\n[!] Não há promoções válidas.")
+                continue
+
+            print("\n--- Selecione uma Promoção para Votar ---")
+            for i, p in enumerate(validated_promotions, start=1):
+                print(f"[{i}] {p['nome']} (Categoria: {p['categoria']})")
             try:
-                pid = int(input("ID da Promoção: "))
-                v = int(input("Voto (1: Gostei, -1: Não Gostei): "))
-                if v not in [1, -1]:
-                    print("Voto inválido! Use 1 ou -1.")
-                    continue
-                publish_event('promocao.voto', {"id": pid, "voto": v})
-                print("[✓] Voto enviado!")
-            except: print("Entrada inválida. Digite apenas números.")
+                idx = int(input("\nNúmero da Promoção: "))
+                if 1 <= idx <= len(validated_promotions):
+                    promo_selecionada = validated_promotions[idx-1]
+                    pid = promo_selecionada['id']
+
+                    if choice == '2':
+                        v = int(input("Voto (1: Gostei, -1: Não Gostei):"))
+                        if v in [1, -1]:
+                            publish_event('promocao.voto', {"id": pid, "voto": v})
+                            print("\n[✓] Voto registrado para '{promo_selecionada['nome']}'!")
+                        else:
+                            print("Voto inválido!")
+                    else:
+                        print("Super voto para '{promo_selecionada['nome']}'")
+                        for i in range(5):
+                            publish_event('promocao.voto', {"id": pid, "voto": 1})
+                            print(f" > {i+1}/5 votos enviados")
+                        print("votos publicados com sucesso!")
+                else:
+                    print("Número inválido!")
+            except ValueError:
+                print("Entrada inválida! Digite um número.")
+
         elif choice == '3':
             cat = input("Categoria para seguir: ")
             subscribe_to_category(cat.strip())
@@ -144,5 +178,6 @@ def display_main_menu():
         elif choice == '0': sys.exit(0)
 
 if __name__ == '__main__':
+    load_promotions()
     threading.Thread(target=consume_validation_events, daemon=True).start()
     display_main_menu()

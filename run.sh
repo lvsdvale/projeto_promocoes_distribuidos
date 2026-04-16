@@ -10,12 +10,14 @@ echo "🚀 Iniciando ecossistema no ambiente Conda: $ENV_NAME"
 gnome-terminal --title="MS Promoção" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 promo.py; exec bash"
 gnome-terminal --title="MS Ranking" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 ranking.py; exec bash"
 gnome-terminal --title="MS Notificação" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 notification.py; exec bash"
+gnome-terminal --title="MS client" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 client.py; exec bash"
+
 
 echo "⏳ Aguardando backends..."
 sleep 2
 
 # Gateways para Loja e Cliente
-gnome-terminal --title="Gateway - Loja" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 gateway.py; exec bash"
-gnome-terminal --title="Gateway - Cliente" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 gateway.py; exec bash"
+gnome-terminal --title="Gateway" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 gateway.py; exec bash"
+
 
 echo "✅ Todos os serviços disparados no ambiente '$ENV_NAME'."
