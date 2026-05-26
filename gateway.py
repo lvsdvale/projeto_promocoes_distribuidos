@@ -1,3 +1,12 @@
+from flask import Flask,jsonify, request
+from flask_sse import sse
+import random
+import json
+import os
+import datetime
+import jwt
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 import pika
 import json
 import threading
@@ -5,6 +14,133 @@ import sys
 import time
 from signature import load_or_generate_keys, sign_event, validate_signature
 import uuid 
+
+load_dotenv()
+
+app = Flask(__name__)
+app.config["REDIS_URL"]="redis://172.17.0.2"
+
+app.register_blueprint(sse, url_prefix='/promotions')
+
+app.config['SECRET_KEY'] = os.getenv("JWT_SECRET")
+DB_FILE = 'users.json'
+
+if not os.path.exists(DB_FILE):
+    with open(DB_FILE, 'w') as f:
+        json.dump({"users": {}}, f)
+
+def load_db():
+    with open(DB_FILE, 'r') as f:
+        return json.load(f)
+
+def save_db(data):
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+        
+        if not token:
+            return jsonify({'message': 'Token está faltando!'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user = data
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'O token expirou!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token inválido!'}), 401
+
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    user_email = data.get('user_email')
+    password = data.get('password')
+    is_store = data.get('is_store', False)
+
+    if not user_email or not password:
+        return jsonify({'message': 'user_email e password são obrigatórios!'}), 400
+
+    db = load_db()
+    if user_email in db['users']:
+        return jsonify({'message': 'Usuário já existe!'}), 400
+
+    hashed_password = generate_password_hash(password)
+    
+    db['users'][user_email] = {
+        'password': hashed_password,
+        'is_store': bool(is_store)
+    }
+    save_db(db)
+
+    return jsonify({'message': 'Usuário criado com sucesso!'}), 201
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    user_email = data.get('user_email')
+    password = data.get('password')
+
+    if not user_email or not password:
+        return jsonify({'message': 'Faltando credenciais!'}), 400
+
+    db = load_db()
+    user = db['users'].get(user_email)
+    if not user or not check_password_hash(user['password'], password):
+        return jsonify({'message': 'Credenciais inválidas!'}), 401
+
+    token = jwt.encode({
+        'user_email': user_email,
+        'is_store': user['is_store'],
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }, app.config['SECRET_KEY'], algorithm='HS256')
+
+    return jsonify({'token': token})
+
+@app.route('/promotion/create', methods=['POST'])
+@token_required
+def create_promotion(current_user):
+    if not current_user.get('is_store'):
+        return jsonify({'message': 'Acesso negado! Você não é uma loja.'}), 403
+
+    data = request.get_json()
+    promotion_name = data.get('name')
+    promotion_value = data.get('value')
+    
+    if not promotion_name or not promotion_value:
+        return jsonify({'message': 'Nome e valor da promoção são obrigatórios!'}), 400
+
+
+
+    return jsonify({'message': 'Promoção criada com sucesso!'}), 201
+
+@app.route('/promotion/list', methods=['GET'])
+@token_required
+def list_promotions(current_user):
+    return jsonify({'message': 'Lista de promoções'}), 200
+
+@app.route('/promotion/subscribe', methods=['POST'])
+@token_required
+def subscribe_promotion(current_user):
+    return jsonify({'message': f'Inscrito na categoria com sucesso!'}), 200
+
+@app.route('/promotion/vote', methods=['POST'])
+@token_required
+def vote_promotion(current_user, promotion_id):
+    return jsonify({'message': f'Voto registrado para a promoção {promotion_id}'}), 200
+
+@app.route('/notifications/unsubscribe', methods=['POST'])
+@token_required
+def cancel_subscribe(current_user):
+    return jsonify({'message': f'Inscrição cancelada com sucesso!'}), 200
+
 
 INSTANCE_ID = str(uuid.uuid4())[:8]
 client_queue_name = f"queue_client_{INSTANCE_ID}"
@@ -15,18 +151,6 @@ private_key, public_key = load_or_generate_keys("gateway")
 _, promo_pub_key = load_or_generate_keys("promocao")
 
 validated_promotions = []
-
-def load_promotions():
-    global validated_promotions
-    try:
-        with open("validated_promotions.json", "r") as f:
-            validated_promotions = json.load(f)
-    except FileNotFoundError:
-        validated_promotions = []
-
-def save_promotions():
-    with open("validated_promotions.json", "w") as f:
-        json.dump(validated_promotions, f)
 
 def get_new_connection():
     """Cria uma nova conexão limpa para evitar conflitos entre threads"""
@@ -99,85 +223,3 @@ def subscribe_to_category(category):
         conn.close()
     except Exception as e:
         print(f"\n[Erro na Inscrição] {e}")
-
-
-def display_store_panel():
-    while True:
-        print("\n" + "="*30 + "\n🏢 PAINEL DA LOJA\n" + "="*30)
-        print("1. Cadastrar Nova Promoção\n0. Voltar")
-        choice = input("\nSeleção: ")
-        if choice == '1':
-            name = input("Nome do Produto: ")
-            cat = input("Categoria: ")
-            promo_id = int(time.time())
-            publish_event('promocao.recebida', {"id": promo_id, "nome": name, "categoria": cat.lower()})
-            print(f"\n[✓] '{name}' enviada para validação!")
-        elif choice == '0': break
-
-def display_client_panel():
-    threading.Thread(target=consume_client_notifications, daemon=True).start()
-    while True:
-        print("\n" + "="*30 + "\n👤 PAINEL DO CLIENTE\n" + "="*30)
-        print("1. Listar Promoções Ativas")
-        print("2. Votar em uma Promoção")
-        print("3. Assinar uma Categoria")
-        print("4. Super Voto (Hot Deal direto)")
-        print("0. Voltar")
-        choice = input("\nSeleção: ")
-        if choice == '1':
-            print("\n--- Promoções Ativas ---")
-            if not validated_promotions:
-                print("Nenhuma promoção disponível no momento.")
-            for p in validated_promotions:
-                print(f"ID: {p['id']} | {p['nome']} [{p['categoria']}]")
-            input("\nPressione ENTER para continuar...")
-        elif choice == '2' or choice == '4':
-            if not validated_promotions:
-                print("\n[!] Não há promoções válidas.")
-                continue
-
-            print("\n--- Selecione uma Promoção para Votar ---")
-            for i, p in enumerate(validated_promotions, start=1):
-                print(f"[{i}] {p['nome']} (Categoria: {p['categoria']})")
-            try:
-                idx = int(input("\nNúmero da Promoção: "))
-                if 1 <= idx <= len(validated_promotions):
-                    promo_selecionada = validated_promotions[idx-1]
-                    pid = promo_selecionada['id']
-
-                    if choice == '2':
-                        v = int(input("Voto (1: Gostei, -1: Não Gostei):"))
-                        if v in [1, -1]:
-                            publish_event('promocao.voto', {"id": pid, "voto": v})
-                            print("\n[✓] Voto registrado para '{promo_selecionada['nome']}'!")
-                        else:
-                            print("Voto inválido!")
-                    else:
-                        print("Super voto para '{promo_selecionada['nome']}'")
-                        for i in range(5):
-                            publish_event('promocao.voto', {"id": pid, "voto": 1})
-                            print(f" > {i+1}/5 votos enviados")
-                        print("votos publicados com sucesso!")
-                else:
-                    print("Número inválido!")
-            except ValueError:
-                print("Entrada inválida! Digite um número.")
-
-        elif choice == '3':
-            cat = input("Categoria para seguir: ")
-            subscribe_to_category(cat.strip())
-        elif choice == '0': break
-
-def display_main_menu():
-    while True:
-        print("\n" + "#"*40 + "\n  GATEWAY DE PROMOÇÕES DISTRIBUÍDAS\n" + "#"*40)
-        print("[ 1 ] Acessar como LOJA\n[ 2 ] Acessar como CLIENTE\n[ 0 ] Sair")
-        choice = input("\nPerfil: ")
-        if choice == '1': display_store_panel()
-        elif choice == '2': display_client_panel()
-        elif choice == '0': sys.exit(0)
-
-if __name__ == '__main__':
-    load_promotions()
-    threading.Thread(target=consume_validation_events, daemon=True).start()
-    display_main_menu()
