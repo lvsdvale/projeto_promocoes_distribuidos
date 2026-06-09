@@ -58,7 +58,7 @@ def register():
     data = request.get_json()
     email = data.get('user_email')
     password = data.get('password')
-    is_store = data.get('is_store', False) # True se for loja, False se for cliente normal
+    is_store = data.get('is_store', False)
 
     if not email or not password:
         return jsonify({'message': 'Preencha todos os campos obrigatórios!'}), 400
