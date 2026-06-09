@@ -100,8 +100,9 @@ def create_promotion(current_user):
     if not current_user.get('is_store'):
         return jsonify({'message': 'Acesso negado!'}), 403
 
-    body = request.get_json() 
-    
+    body = request.get_json()
+    email_loja = current_user.get('user_email')
+    body['email_loja'] = email_loja
     private_key_loja, _ = load_or_generate_keys("loja")
     signature = sign_event(private_key_loja, body)
 

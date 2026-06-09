@@ -112,5 +112,17 @@
         "id": "4818ca9d-2d2f-4150-9322-2cfb6568ecab",
         "nome": "GTA VI deluxe edition",
         "categoria": "jogos"
+    },
+    {
+        "id": "bd80175a-d2d7-4843-8c47-1492a6ad95c3",
+        "nome": "GTA VI Special",
+        "categoria": "jogos",
+        "email_loja": "vale@alunos.utfpr.edu.br"
+    },
+    {
+        "id": "96732ae3-9bfe-4484-9b25-353cd5b569ab",
+        "nome": "novo jogo",
+        "categoria": "jogos",
+        "email_loja": "vale@alunos.utfpr.edu.br"
     }
 ]
