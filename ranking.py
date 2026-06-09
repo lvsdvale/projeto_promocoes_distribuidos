@@ -10,7 +10,7 @@ private_key, public_key = load_or_generate_keys("ranking")
 _, gateway_pub_key = load_or_generate_keys("gateway")
 
 vote_ranking = {}
-promocoes_cache = {} # 🌟 FALTAVA ISSO: Cache para associar o ID ao Nome e E-mail da loja
+promocoes_cache = {} 
 
 def process_vote(ch, method, properties, body):
     message = json.loads(body)
