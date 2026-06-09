@@ -8,7 +8,10 @@
         "lucasvinicius557@gmail.com": {
             "password": "scrypt:32768:8:1$feHevmSlayfIPQUS$5ed5555511efbf7c472c700c7520dcb8c9fb2df91117e8552ea9617a3ff6513a37f05c986a895093745e51e12f408a8592051ce7721f3b83bb0e26d1cb5be963",
             "is_store": false,
-            "interests": []
+            "interests": [
+                "computador",
+                "jogos"
+            ]
         }
     }
 }

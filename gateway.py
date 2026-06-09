@@ -98,24 +98,24 @@ def login():
 @token_required
 def create_promotion(current_user):
     if not current_user.get('is_store'):
-        return jsonify({'message': 'Acesso negado. Apenas lojas podem cadastrar promoções!'}), 403
+        return jsonify({'message': 'Acesso negado!'}), 403
 
     body = request.get_json() 
+    
     private_key_loja, _ = load_or_generate_keys("loja")
     signature = sign_event(private_key_loja, body)
-    
+
     payload_completo = {
         "dados": body,
         "Signature": signature
     }
-
+    print(f"Enviando promoção com payload: {payload_completo}")
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     channel = connection.channel()
     channel.basic_publish(exchange='Promocoes', routing_key='promocao.recebida', body=json.dumps(payload_completo))
     connection.close()
 
-    return jsonify({'message': 'Promoção enviada para análise de integridade...'}), 202
-
+    return jsonify({'message': 'Promoção enviada com sucesso!'}), 202
 @app.route('/promotion/list', methods=['GET'])
 @token_required
 def list_promotions(current_user):
@@ -193,6 +193,8 @@ def background_mom_listener():
             if validate_signature(promo_pub_key, data, sig):
                 if not any(p.get('id') == data.get('id') for p in cached_promotions):
                     cached_promotions.append(data)
+                    with app.app_context():
+                        sse.publish(data, type='nova_promocao_geral')
 
         elif rk == 'promocao.categoria':
             if validate_signature(notif_pub_key, data, sig):

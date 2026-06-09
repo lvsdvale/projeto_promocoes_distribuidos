@@ -6,20 +6,18 @@ export default function Cadastro() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isStore, setIsStore] = useState(false); // Define se é Loja ou Cliente
+  const [isStore, setIsStore] = useState(false);
   const navigate = useNavigate();
 
   const handleCadastro = async (e) => {
     e.preventDefault();
 
-    // Validação básica de senha no próprio front
     if (password !== confirmPassword) {
       alert('As senhas não coincidem!');
       return;
     }
 
     try {
-      // Faz a requisição para a rota de registro do seu gateway.py
       const response = await api.post('/register', {
         user_email: email,
         password: password,
@@ -27,8 +25,6 @@ export default function Cadastro() {
       });
 
       alert(response.data.message || 'Cadastro realizado com sucesso!');
-      
-      // Após cadastrar, redireciona para a tela de login
       navigate('/');
     } catch (error) {
       alert('Erro no cadastro: ' + (error.response?.data?.message || error.message));
@@ -36,77 +32,72 @@ export default function Cadastro() {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
+    <div className="card">
       <h2>Criar Nova Conta</h2>
       <form onSubmit={handleCadastro}>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>E-mail:</label>
+        <div className="form-group">
+          <label>E-mail</label>
           <input 
             type="email" 
             placeholder="Digite seu e-mail" 
             value={email}
             onChange={e => setEmail(e.target.value)} 
             required 
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
         </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>Senha:</label>
+        <div className="form-group">
+          <label>Senha</label>
           <input 
             type="password" 
             placeholder="Digite sua senha" 
             value={password}
             onChange={e => setPassword(e.target.value)} 
             required 
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
         </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>Confirmar Senha:</label>
+        <div className="form-group">
+          <label>Confirmar Senha</label>
           <input 
             type="password" 
             placeholder="Confirme sua senha" 
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)} 
             required 
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
           />
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontWeight: 'bold' }}>Tipo de Conta:</label>
-          <div style={{ marginTop: '5px' }}>
-            <label style={{ marginRight: '15px' }}>
+        <div className="form-group">
+          <label style={{ fontWeight: 'bold', marginBottom: '8px' }}>Tipo de Conta</label>
+          <div style={{ display: 'flex', gap: '20px', marginTop: '5px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
               <input 
                 type="radio" 
                 name="user_type" 
                 checked={!isStore} 
                 onChange={() => setIsStore(false)} 
               />
-              Consumidor (Cliente)
+              Consumidor
             </label>
-            <label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
               <input 
                 type="radio" 
                 name="user_type" 
                 checked={isStore} 
                 onChange={() => setIsStore(true)} 
               />
-              Loja (Vendedor)
+              Loja
             </label>
           </div>
         </div>
 
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          Cadastrar
-        </button>
+        <button type="submit" className="btn-primary">Cadastrar</button>
       </form>
 
-      <div style={{ marginTop: '15px', textAlign: 'center' }}>
-        <p>Já tem uma conta? <span onClick={() => navigate('/')} style={{ color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>Faça Login</span></p>
-      </div>
+      <button className="btn-link" onClick={() => navigate('/')}>
+        Já tem uma conta? Faça Login
+      </button>
     </div>
   );
 }

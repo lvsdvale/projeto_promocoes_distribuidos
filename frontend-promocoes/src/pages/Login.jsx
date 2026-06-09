@@ -12,25 +12,28 @@ export default function Login() {
     try {
       const response = await api.post('/login', { user_email: email, password });
       localStorage.setItem('token', response.data.token);
-      
-      // Redireciona dependendo se é loja ou cliente normal
-      if (response.data.is_store) {
-        navigate('/loja');
-      } else {
-        navigate('/cliente');
-      }
+      if (response.data.is_store) navigate('/loja');
+      else navigate('/cliente');
     } catch (error) {
-      alert('Erro no login: ' + error.response?.data?.message);
+      alert('Erro no login: ' + (error.response?.data?.message || error.message));
     }
   };
 
   return (
-    <form onSubmit={handleLogin}>
-      <h2>Login</h2>
-      <input type="email" placeholder="E-mail" onChange={e => setEmail(e.target.value)} required />
-      <input type="password" placeholder="Senha" onChange={e => setPassword(e.target.value)} required />
-      <button type="submit">Entrar</button>
-      <button type="button" onClick={() => navigate('/cadastro')}>Ir para Cadastro</button>
-    </form>
+    <div className="card">
+      <h2>Acesso ao Sistema</h2>
+      <form onSubmit={handleLogin}>
+        <div className="form-group">
+          <label>E-mail</label>
+          <input type="email" placeholder="Digite seu e-mail" onChange={e => setEmail(e.target.value)} required />
+        </div>
+        <div className="form-group">
+          <label>Senha</label>
+          <input type="password" placeholder="Digite sua senha" onChange={e => setPassword(e.target.value)} required />
+        </div>
+        <button type="submit" className="btn-primary">Entrar</button>
+      </form>
+      <button className="btn-link" onClick={() => navigate('/cadastro')}>Não tem conta? Cadastre-se</button>
+    </div>
   );
 }

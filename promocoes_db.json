@@ -1,1 +1,116 @@
-[]
+[
+    {
+        "dados": {
+            "id": "c9e138f8-648c-4f4c-8707-09c7dfce1809",
+            "nome": "Notebook",
+            "categoria": "computador"
+        },
+        "Signature": "GERADO_NO_GATEWAY"
+    },
+    {
+        "dados": {
+            "id": "d5db4d81-6a1f-4978-a9ce-353ca76e2fea",
+            "nome": "PC",
+            "categoria": "computador"
+        },
+        "Signature": "GERADO_NO_GATEWAY"
+    },
+    {
+        "dados": {
+            "id": "1e17f9ab-ad80-49e4-b097-3cd5b30fe833",
+            "nome": "Notebook Gamer",
+            "categoria": "computador"
+        },
+        "Signature": "GERADO_NO_GATEWAY"
+    },
+    {
+        "id": "ea92788b-4cbe-4bf9-b9e4-c4a14e0b5d91",
+        "nome": "Notebook",
+        "categoria": "Informatica"
+    },
+    {
+        "id": "9398e9fe-83a3-430b-a447-175947548506",
+        "nome": "Gta V",
+        "categoria": "Jogos"
+    },
+    {
+        "id": "0f983c45-3da0-4529-8911-6a868b941739",
+        "nome": "GTA VI",
+        "categoria": "Jogos"
+    },
+    {
+        "id": "cddd9ec2-a81e-42fa-a63e-603bf54ca3ba",
+        "nome": "S22",
+        "categoria": "Smartphone"
+    },
+    {
+        "id": "3b2e014b-1d5b-4bbc-83cb-8dfc6aef8ecf",
+        "nome": "S22 ",
+        "categoria": "Smartphone"
+    },
+    {
+        "id": "5e12ed02-26d4-43fe-8675-f8df68467a18",
+        "nome": "RDR 2",
+        "categoria": "Jogos"
+    },
+    {
+        "id": "f0db22e9-add0-4ad6-b1de-3777d0ef6c73",
+        "nome": "AC IV",
+        "categoria": "Jogos"
+    },
+    {
+        "id": "59701fe6-31c9-424f-b55d-de57e91a141f",
+        "nome": "LOL",
+        "categoria": "Jogos"
+    },
+    {
+        "id": "aabd81dc-8c71-4616-9fc4-db453740ddfd",
+        "nome": "LOL 2",
+        "categoria": "jogos"
+    },
+    {
+        "id": "9c8febb1-7147-4cd9-9511-0fe634d49661",
+        "nome": "jogo 1",
+        "categoria": "jogos"
+    },
+    {
+        "id": "9da869a1-f8b9-4939-97b7-dce628728874",
+        "nome": "JOGO 2",
+        "categoria": "jogos"
+    },
+    {
+        "id": "c75d1069-367b-400b-b3b9-78c058c6b15e",
+        "nome": "jogo 3",
+        "categoria": "jogos"
+    },
+    {
+        "id": "e77f792b-f7c5-49cf-ac02-8dfb683deba6",
+        "nome": "jogo 4",
+        "categoria": "jogos"
+    },
+    {
+        "id": "af5cf6af-37a3-44f5-977a-08a864268f5b",
+        "nome": "jogo 6",
+        "categoria": "jogos"
+    },
+    {
+        "id": "8a5cfa3e-8f30-4850-b681-870bd64a07e8",
+        "nome": "gta",
+        "categoria": "jogos"
+    },
+    {
+        "id": "5d30125e-ee58-4ac4-8545-f21fce5774de",
+        "nome": "DOTA",
+        "categoria": "jogos"
+    },
+    {
+        "id": "07cccf21-d81f-491c-b3c5-057356424740",
+        "nome": "GTA VI",
+        "categoria": "jogos"
+    },
+    {
+        "id": "4818ca9d-2d2f-4150-9322-2cfb6568ecab",
+        "nome": "GTA VI deluxe edition",
+        "categoria": "jogos"
+    }
+]
