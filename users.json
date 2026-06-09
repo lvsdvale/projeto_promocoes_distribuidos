@@ -1,1 +1,14 @@
-{"users": {}}
+{
+    "users": {
+        "vale@alunos.utfpr.edu.br": {
+            "password": "scrypt:32768:8:1$EQLbvA0RrkHbC64A$efca62457a80055bae42b323a2bd02dbf19d49710c60e58ec3508bb9bca28365a74d43f87f08df119f8f06914cb648aa0e40f55b7b7100fecafe4ff36b778219",
+            "is_store": true,
+            "interests": []
+        },
+        "lucasvinicius557@gmail.com": {
+            "password": "scrypt:32768:8:1$feHevmSlayfIPQUS$5ed5555511efbf7c472c700c7520dcb8c9fb2df91117e8552ea9617a3ff6513a37f05c986a895093745e51e12f408a8592051ce7721f3b83bb0e26d1cb5be963",
+            "is_store": false,
+            "interests": []
+        }
+    }
+}

@@ -25,10 +25,8 @@ gnome-terminal --title="MS Gateway" -- bash -c "conda run -n $ENV_NAME --no-capt
 echo "⏳ Aguardando o Gateway iniciar na porta 5000..."
 sleep 3
 
-# Descomente a linha abaixo se for testar com aquele script frontend_client.py que criei
-# gnome-terminal --title="Cliente Frontend" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 frontend_client.py; exec bash"
-
-# Descomente a linha abaixo se quiser já abrir um terminal para a Loja simular envio de promoções
-# gnome-terminal --title="Loja Publisher" -- bash -c "conda run -n $ENV_NAME --no-capture-output python3 store_publisher.py; exec bash"
+echo "💻 Subindo o Frontend Web (React)..."
+# Entra na pasta do frontend e inicia a aplicação React
+gnome-terminal --title="Frontend React" -- bash -c "cd frontend-promocoes && npm start; exec bash"
 
 echo "✅ Todos os serviços disparados no ambiente '$ENV_NAME'."

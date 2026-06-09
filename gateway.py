@@ -10,8 +10,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pika
 import threading
 from signature import load_or_generate_keys, sign_event, validate_signature
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 app.config["REDIS_URL"] = os.getenv("REDIS_URL", "redis://localhost:6379")
 app.register_blueprint(sse, url_prefix='/promotions/stream')
 
@@ -95,17 +97,21 @@ def login():
 @app.route('/promotion/create', methods=['POST'])
 @token_required
 def create_promotion(current_user):
-    # Proteção de Rota: Apenas usuários do tipo Loja podem cadastrar promoções
     if not current_user.get('is_store'):
         return jsonify({'message': 'Acesso negado. Apenas lojas podem cadastrar promoções!'}), 403
 
-    body = request.get_json()
-    if 'dados' not in body or 'Signature' not in body:
-        return jsonify({'message': 'Payload inválido. Requer dados e assinatura da loja.'}), 400
+    body = request.get_json() 
+    private_key_loja, _ = load_or_generate_keys("loja")
+    signature = sign_event(private_key_loja, body)
+    
+    payload_completo = {
+        "dados": body,
+        "Signature": signature
+    }
 
     connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     channel = connection.channel()
-    channel.basic_publish(exchange='Promocoes', routing_key='promocao.recebida', body=json.dumps(body))
+    channel.basic_publish(exchange='Promocoes', routing_key='promocao.recebida', body=json.dumps(payload_completo))
     connection.close()
 
     return jsonify({'message': 'Promoção enviada para análise de integridade...'}), 202
@@ -118,7 +124,6 @@ def list_promotions(current_user):
 @app.route('/promotion/vote', methods=['POST'])
 @token_required
 def vote_promotion(current_user):
-    # Proteção de Rota: Apenas clientes normais (consumidores) devem votar
     if current_user.get('is_store'):
         return jsonify({'message': 'Acesso negado. Lojas não podem votar em promoções!'}), 403
 
