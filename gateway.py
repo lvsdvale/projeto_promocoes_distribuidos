@@ -1,6 +1,6 @@
-from flask import Flask,jsonify, request
+# gateway.py
+from flask import Flask, jsonify, request
 from flask_sse import sse
-import random
 import json
 import os
 import datetime
@@ -8,218 +8,205 @@ import jwt
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 import pika
-import json
 import threading
-import sys
-import time
 from signature import load_or_generate_keys, sign_event, validate_signature
-import uuid 
-
-load_dotenv()
 
 app = Flask(__name__)
-app.config["REDIS_URL"]="redis://172.17.0.2"
+app.config["REDIS_URL"] = os.getenv("REDIS_URL", "redis://localhost:6379")
+app.register_blueprint(sse, url_prefix='/promotions/stream')
 
-app.register_blueprint(sse, url_prefix='/promotions')
+app.config['SECRET_KEY'] = 'utfpr_sistemas_distribuidos_secret'
+USER_DB = 'users.json'
 
-app.config['SECRET_KEY'] = os.getenv("JWT_SECRET")
-DB_FILE = 'users.json'
+private_key, public_key = load_or_generate_keys("gateway")
+_, promo_pub_key = load_or_generate_keys("promocao")
+_, notif_pub_key = load_or_generate_keys("notificacao")
 
-if not os.path.exists(DB_FILE):
-    with open(DB_FILE, 'w') as f:
+if not os.path.exists(USER_DB):
+    with open(USER_DB, 'w') as f:
         json.dump({"users": {}}, f)
 
-def load_db():
-    with open(DB_FILE, 'r') as f:
-        return json.load(f)
+def load_users():
+    with open(USER_DB, 'r') as f: return json.load(f)
 
-def save_db(data):
-    with open(DB_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def save_users(data):
+    with open(USER_DB, 'w') as f: json.dump(data, f, indent=4)
+
+cached_promotions = []
 
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
         if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].split(" ")[1]
+            parts = request.headers['Authorization'].split(" ")
+            if len(parts) == 2: token = parts[1]
         
         if not token:
-            return jsonify({'message': 'Token está faltando!'}), 401
-
+            return jsonify({'message': 'Token de autenticação ausente!'}), 401
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            current_user = data
-        except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'O token expirou!'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'message': 'Token inválido!'}), 401
-
+            current_user = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except:
+            return jsonify({'message': 'Token inválido ou expirado!'}), 401
         return f(current_user, *args, **kwargs)
     return decorated
 
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    user_email = data.get('user_email')
+    email = data.get('user_email')
     password = data.get('password')
-    is_store = data.get('is_store', False)
+    is_store = data.get('is_store', False) # True se for loja, False se for cliente normal
 
-    if not user_email or not password:
-        return jsonify({'message': 'user_email e password são obrigatórios!'}), 400
+    if not email or not password:
+        return jsonify({'message': 'Preencha todos os campos obrigatórios!'}), 400
 
-    db = load_db()
-    if user_email in db['users']:
-        return jsonify({'message': 'Usuário já existe!'}), 400
+    db = load_users()
+    if email in db['users']:
+        return jsonify({'message': 'Este e-mail já está cadastrado!'}), 400
 
-    hashed_password = generate_password_hash(password)
-    
-    db['users'][user_email] = {
-        'password': hashed_password,
-        'is_store': bool(is_store)
+    db['users'][email] = {
+        'password': generate_password_hash(password),
+        'is_store': bool(is_store),
+        'interests': []
     }
-    save_db(db)
-
-    return jsonify({'message': 'Usuário criado com sucesso!'}), 201
+    save_users(db)
+    return jsonify({'message': 'Usuário registrado com sucesso!'}), 201
 
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    user_email = data.get('user_email')
+    email = data.get('user_email')
     password = data.get('password')
 
-    if not user_email or not password:
-        return jsonify({'message': 'Faltando credenciais!'}), 400
-
-    db = load_db()
-    user = db['users'].get(user_email)
+    db = load_users()
+    user = db['users'].get(email)
     if not user or not check_password_hash(user['password'], password):
-        return jsonify({'message': 'Credenciais inválidas!'}), 401
+        return jsonify({'message': 'Credenciais incorretas!'}, 401)
 
     token = jwt.encode({
-        'user_email': user_email,
+        'user_email': email,
         'is_store': user['is_store'],
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
     }, app.config['SECRET_KEY'], algorithm='HS256')
-
-    return jsonify({'token': token})
+    
+    return jsonify({'token': token, 'is_store': user['is_store']})
 
 @app.route('/promotion/create', methods=['POST'])
 @token_required
 def create_promotion(current_user):
+    # Proteção de Rota: Apenas usuários do tipo Loja podem cadastrar promoções
     if not current_user.get('is_store'):
-        return jsonify({'message': 'Acesso negado! Você não é uma loja.'}), 403
+        return jsonify({'message': 'Acesso negado. Apenas lojas podem cadastrar promoções!'}), 403
 
-    data = request.get_json()
-    promotion_name = data.get('name')
-    promotion_value = data.get('value')
-    
-    if not promotion_name or not promotion_value:
-        return jsonify({'message': 'Nome e valor da promoção são obrigatórios!'}), 400
+    body = request.get_json()
+    if 'dados' not in body or 'Signature' not in body:
+        return jsonify({'message': 'Payload inválido. Requer dados e assinatura da loja.'}), 400
 
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    channel = connection.channel()
+    channel.basic_publish(exchange='Promocoes', routing_key='promocao.recebida', body=json.dumps(body))
+    connection.close()
 
-
-    return jsonify({'message': 'Promoção criada com sucesso!'}), 201
+    return jsonify({'message': 'Promoção enviada para análise de integridade...'}), 202
 
 @app.route('/promotion/list', methods=['GET'])
 @token_required
 def list_promotions(current_user):
-    return jsonify({'message': 'Lista de promoções'}), 200
-
-@app.route('/promotion/subscribe', methods=['POST'])
-@token_required
-def subscribe_promotion(current_user):
-    return jsonify({'message': f'Inscrito na categoria com sucesso!'}), 200
+    return jsonify({'promotions': cached_promotions}), 200
 
 @app.route('/promotion/vote', methods=['POST'])
 @token_required
-def vote_promotion(current_user, promotion_id):
-    return jsonify({'message': f'Voto registrado para a promoção {promotion_id}'}), 200
+def vote_promotion(current_user):
+    # Proteção de Rota: Apenas clientes normais (consumidores) devem votar
+    if current_user.get('is_store'):
+        return jsonify({'message': 'Acesso negado. Lojas não podem votar em promoções!'}), 403
+
+    data = request.get_json()
+    promo_id = data.get('promotion_id')
+    vote_value = data.get('vote')
+
+    if not promo_id or vote_value not in [1, -1]:
+        return jsonify({'message': 'Dados de votação inválidos!'}), 400
+
+    payload_voto = {'promotion_id': promo_id, 'vote': vote_value, 'user': current_user['user_email']}
+    signature = sign_event(private_key, payload_voto)
+    message = {"dados": payload_voto, "Signature": signature}
+
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    channel = connection.channel()
+    channel.basic_publish(exchange='Promocoes', routing_key='promocao.voto', body=json.dumps(message))
+    connection.close()
+
+    return jsonify({'message': 'Voto encaminhado com sucesso!'}), 202
+
+@app.route('/promotion/subscribe', methods=['POST'])
+@token_required
+def subscribe_category(current_user):
+    if current_user.get('is_store'):
+        return jsonify({'message': 'Lojas não gerenciam tópicos de interesse!'}), 403
+
+    category = request.get_json().get('category', '').lower()
+    if not category: return jsonify({'message': 'Categoria inválida!'}), 400
+
+    db = load_users()
+    if category not in db['users'][current_user['user_email']]['interests']:
+        db['users'][current_user['user_email']]['interests'].append(category)
+        save_users(db)
+    return jsonify({'message': f'Inscrito na categoria: {category}'}), 200
 
 @app.route('/notifications/unsubscribe', methods=['POST'])
 @token_required
-def cancel_subscribe(current_user):
-    return jsonify({'message': f'Inscrição cancelada com sucesso!'}), 200
+def unsubscribe_category(current_user):
+    category = request.get_json().get('category', '').lower()
+    db = load_users()
+    if category in db['users'][current_user['user_email']]['interests']:
+        db['users'][current_user['user_email']]['interests'].remove(category)
+        save_users(db)
+    return jsonify({'message': f'Inscrição removida de: {category}'}), 200
 
-
-INSTANCE_ID = str(uuid.uuid4())[:8]
-client_queue_name = f"queue_client_{INSTANCE_ID}"
-
-EXCHANGE_NAME = 'Promocoes'
-
-private_key, public_key = load_or_generate_keys("gateway")
-_, promo_pub_key = load_or_generate_keys("promocao")
-
-validated_promotions = []
-
-def get_new_connection():
-    """Cria uma nova conexão limpa para evitar conflitos entre threads"""
-    params = pika.ConnectionParameters(host='localhost', heartbeat=600)
-    connection = pika.BlockingConnection(params)
+def background_mom_listener():
+    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     channel = connection.channel()
-    channel.exchange_declare(exchange=EXCHANGE_NAME, exchange_type='topic')
-    return connection, channel
+    channel.exchange_declare(exchange='Promocoes', exchange_type='topic')
+    
+    result = channel.queue_declare(queue='', exclusive=True)
+    q_name = result.method.queue
 
-def publish_event(routing_key, data):
-    try:
-        conn, ch = get_new_connection()
-        signature = sign_event(private_key, data)
-        message = {"dados": data, "Signature": signature}
-        ch.basic_publish(exchange=EXCHANGE_NAME, routing_key=routing_key, body=json.dumps(message))
-        conn.close() 
-    except Exception as e:
-        print(f"\n[Erro de Publicação] {e}")
+    channel.queue_bind(exchange='Promocoes', queue=q_name, routing_key='promocao.publicada')
+    channel.queue_bind(exchange='Promocoes', queue=q_name, routing_key='promocao.categoria')
+    channel.queue_bind(exchange='Promocoes', queue=q_name, routing_key='notificação.hotdeal')
 
-def consume_validation_events():
-    try:
-        conn, ch = get_new_connection()
-        result = ch.queue_declare(queue='', durable=False, exclusive=True)
-        q_name = result.method.queue
-        ch.queue_bind(exchange=EXCHANGE_NAME, queue=q_name, routing_key='promocao.publicada')
+    def callback(ch, method, properties, body):
+        global cached_promotions
+        message = json.loads(body)
+        data = message.get('dados')
+        sig = message.get('Signature')
+        rk = method.routing_key
 
-        def callback(ch, method, properties, body):
-            message = json.loads(body)
-            if validate_signature(promo_pub_key, message['dados'], message['Signature']):
-                data = message['dados']
-                if not any(p['id'] == data['id'] for p in validated_promotions):
-                    validated_promotions.append(data)
-                    save_promotions()
+        if rk == 'promocao.publicada':
+            if validate_signature(promo_pub_key, data, sig):
+                if not any(p.get('id') == data.get('id') for p in cached_promotions):
+                    cached_promotions.append(data)
 
-        ch.basic_consume(queue=q_name, on_message_callback=callback, auto_ack=True)
-        ch.start_consuming()
-    except Exception as e:
-        print(f"\n[Erro na Thread de Validação] {e}")
+        elif rk == 'promocao.categoria':
+            if validate_signature(notif_pub_key, data, sig):
+                target_cat = data.get('categoria', '').lower()
+                db = load_users()
+                with app.app_context():
+                    for email, profile in db['users'].items():
+                        if target_cat in profile.get('interests', []):
+                            sse.publish(data, type='categoria_update', channel=email)
 
-def consume_client_notifications():
-    """Thread dedicada apenas para as notificações do usuário"""
-    global client_queue_name
-    try:
-        conn, ch = get_new_connection()
-        
-        ch.queue_declare(queue=client_queue_name, durable=False, exclusive=False, auto_delete=True)
-        ch.queue_bind(exchange=EXCHANGE_NAME, queue=client_queue_name, routing_key='promocao.destaque_notificacao')
+        elif rk == 'notificação.hotdeal':
+            if validate_signature(notif_pub_key, data, sig):
+                with app.app_context():
+                    sse.publish(data, type='hotdeal_broadcast')
 
-        def callback(ch, method, properties, body):
-            data = json.loads(body)
-            print(f"\n\n🔔 [NOTIFICAÇÃO - Tópico: {method.routing_key}] 🔔")
-            print(json.dumps(data, indent=2, ensure_ascii=False))
-            print("\nPressione ENTER para continuar...", end="", flush=True)
+    channel.basic_consume(queue=q_name, on_message_callback=callback, auto_ack=True)
+    channel.start_consuming()
 
-        ch.basic_consume(queue=client_queue_name, on_message_callback=callback, auto_ack=True)
-        ch.start_consuming()
-    except Exception as e:
-        print(f"\n[Erro na Thread de Notificações] {e}")
+threading.Thread(target=background_mom_listener, daemon=True).start()
 
-def subscribe_to_category(category):
-    """Faz o binding usando uma conexão temporária na fila da instância"""
-    if not client_queue_name:
-        print("\n[!] Fila de notificações não está pronta.")
-        return
-    try:
-        conn, ch = get_new_connection()
-        routing_key = f"promocao.{category.lower()}"
-        ch.queue_bind(exchange=EXCHANGE_NAME, queue=client_queue_name, routing_key=routing_key)
-        print(f"\n[Sucesso] Inscrito na categoria: {category}")
-        conn.close()
-    except Exception as e:
-        print(f"\n[Erro na Inscrição] {e}")
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

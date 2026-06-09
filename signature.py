@@ -1,3 +1,4 @@
+# signature.py
 import json
 import base64
 import os
@@ -25,10 +26,10 @@ def load_or_generate_keys(service_name):
             encryption_algorithm=serialization.NoEncryption()
         ))
     with open(pub_path, "wb") as f:
-        f.write(public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ))
+            f.write(public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo
+            ))
     return private_key, public_key
 
 def sign_event(private_key, data):
